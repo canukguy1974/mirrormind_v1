@@ -1,70 +1,62 @@
-# Getting Started with Create React App
+# MirrorMind v1 Onboarding
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+This repo now contains a practical v1 scaffold aligned to `muse_talk_mirror_mind_v_1.md`.
 
-## Available Scripts
+## What was here before
 
-In the project directory, you can run:
+- Existing app was **Create React App**, not Next.js.
+- Useful reusable piece: persona concept (`Flirty AF`, `Brutally Honest`, `Therapist`).
+- Legacy `src/components/mirrormind-agent.jsx` has been switched to env vars (`REACT_APP_DID_CLIENT_KEY`, `REACT_APP_DID_AGENT_ID`) so secrets are no longer hardcoded.
 
-### `npm start`
+## Current project structure
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+```text
+frontend/          # Next.js UI (token streaming + persona selection + avatar panel placeholder)
+api/               # FastAPI orchestration API (SSE stream, vLLM mode, TTS chunk handoff)
+docker/
+  docker-compose.yml
+services/
+  tts/             # FastAPI stub service (phase 2 integration point)
+  avatar/          # FastAPI stub service (phase 3 integration point)
+assets/
+  avatars/         # put source portrait assets here
+models/            # mount model/cache storage here
+```
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Fast start (local)
 
-### `npm test`
+1. Copy env defaults:
+   - `cp .env.example .env` (PowerShell: `Copy-Item .env.example .env`)
+2. Start baseline stack (no GPU required):
+   - `docker compose -f docker/docker-compose.yml --env-file .env up --build`
+3. Open:
+   - Frontend: `http://localhost:3000`
+   - API health: `http://localhost:8000/health`
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+This runs in `STREAM_MODE=mock` so you can validate UI streaming immediately.
 
-### `npm run build`
+## Switch to real vLLM streaming
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+1. Set in `.env`:
+   - `STREAM_MODE=vllm`
+   - `MODEL_NAME=<your model>`
+2. Start with GPU profile:
+   - `docker compose -f docker/docker-compose.yml --env-file .env --profile gpu up --build`
+3. Validate:
+   - `http://localhost:8001/v1/models`
+   - send a chat message in UI and confirm streamed tokens.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+## What is already aligned to your target architecture
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+- Streaming text path is implemented end-to-end.
+- API chunking hook for TTS handoff is implemented (`/tts/speak` calls from API).
+- Avatar service integration point exists (`/avatar/lip-sync` stub).
+- Docker topology includes: `frontend`, `api`, `vllm`, `tts`, `avatar`, optional `redis`.
 
-### `npm run eject`
+## What to build next (in order)
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
-
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
-
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
-
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+1. Replace `services/tts` stub with real low-latency TTS (Piper/Kokoro/hosted streaming).
+2. Replace `services/avatar` stub with MuseTalk worker that consumes TTS audio chunks.
+3. Push a real media stream URL back to frontend avatar panel (HLS or WebRTC).
+4. Add queue/session state (Redis) once concurrency increases.
+5. Add voice input/VAD turn-taking (TEN) only after text+TTS+avatar loop is stable.

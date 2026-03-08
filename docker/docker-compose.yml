@@ -1,0 +1,61 @@
+name: mirrormind-v1
+
+services:
+  frontend:
+    build:
+      context: ../frontend
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ../api
+    environment:
+      STREAM_MODE: ${STREAM_MODE:-mock}
+      MODEL_NAME: ${MODEL_NAME:-Qwen/Qwen2.5-7B-Instruct}
+      VLLM_BASE_URL: ${VLLM_BASE_URL:-http://vllm:8001}
+      TTS_BASE_URL: ${TTS_BASE_URL:-http://tts:8010}
+      AVATAR_BASE_URL: ${AVATAR_BASE_URL:-http://avatar:8020}
+      TTS_FLUSH_CHARS: ${TTS_FLUSH_CHARS:-48}
+    ports:
+      - "8000:8000"
+    depends_on:
+      - tts
+      - avatar
+
+  tts:
+    build:
+      context: ../services/tts
+    expose:
+      - "8010"
+
+  avatar:
+    build:
+      context: ../services/avatar
+    ports:
+      - "8020:8020"
+
+  vllm:
+    image: vllm/vllm-openai:latest
+    command: >
+      --model ${MODEL_NAME:-Qwen/Qwen2.5-7B-Instruct}
+      --host 0.0.0.0
+      --port 8001
+      --gpu-memory-utilization 0.92
+    ports:
+      - "8001:8001"
+    volumes:
+      - ../models:/models
+    profiles:
+      - gpu
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    profiles:
+      - cache
