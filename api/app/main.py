@@ -10,11 +10,14 @@ from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
+from .ollama_client import stream_ollama_chat
 from .vllm_client import stream_vllm_chat
 
 STREAM_MODE = os.getenv("STREAM_MODE", "mock").lower()
 MODEL_NAME = os.getenv("MODEL_NAME", "Qwen/Qwen2.5-7B-Instruct")
 VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001")
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", MODEL_NAME)
 TTS_BASE_URL = os.getenv("TTS_BASE_URL", "http://localhost:8010")
 AVATAR_BASE_URL = os.getenv("AVATAR_BASE_URL", "http://localhost:8020")
 TTS_FLUSH_CHARS = int(os.getenv("TTS_FLUSH_CHARS", "48"))
@@ -83,10 +86,18 @@ def persona_prompt(persona: str) -> str:
 
 @app.get("/health")
 async def health() -> dict:
+  llm_target = {
+    "mock": "mock",
+    "vllm": VLLM_BASE_URL,
+    "ollama": OLLAMA_BASE_URL
+  }.get(STREAM_MODE, "unknown")
+
   return {
     "status": "ok",
     "stream_mode": STREAM_MODE,
     "model_name": MODEL_NAME,
+    "ollama_model": OLLAMA_MODEL,
+    "llm_target": llm_target,
     "avatar_base_url": AVATAR_BASE_URL
   }
 
@@ -124,8 +135,18 @@ async def chat_stream(
           model=MODEL_NAME,
           messages=messages
         )
-      else:
+      elif STREAM_MODE == "ollama":
+        token_stream = stream_ollama_chat(
+          base_url=OLLAMA_BASE_URL,
+          model=OLLAMA_MODEL,
+          messages=messages
+        )
+      elif STREAM_MODE == "mock":
         token_stream = stream_mock_tokens(message=message, persona=persona)
+      else:
+        raise RuntimeError(
+          "Unsupported STREAM_MODE. Use one of: mock, vllm, ollama."
+        )
 
       async for token in token_stream:
         full_text += token

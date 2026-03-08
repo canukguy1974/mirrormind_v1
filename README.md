@@ -46,6 +46,19 @@ This runs in `STREAM_MODE=mock` so you can validate UI streaming immediately.
    - `http://localhost:8001/v1/models`
    - send a chat message in UI and confirm streamed tokens.
 
+## Switch to local Ollama streaming
+
+1. Ensure Ollama is running on your host machine.
+2. Set in `.env`:
+   - `STREAM_MODE=ollama`
+   - `OLLAMA_BASE_URL=http://host.docker.internal:11434`
+   - `OLLAMA_MODEL=<your-ollama-model-tag>`
+3. Start without the GPU vLLM profile:
+   - `docker compose -f docker/docker-compose.yml --env-file .env up --build`
+4. Validate:
+   - `http://localhost:8000/health` should show `stream_mode: ollama`
+   - send a chat message in UI and confirm streamed tokens.
+
 ## What is already aligned to your target architecture
 
 - Streaming text path is implemented end-to-end.
