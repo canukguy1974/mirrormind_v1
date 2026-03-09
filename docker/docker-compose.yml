@@ -22,7 +22,8 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       TTS_BASE_URL: ${TTS_BASE_URL:-http://tts:8010}
       AVATAR_BASE_URL: ${AVATAR_BASE_URL:-http://avatar:8020}
-      TTS_FLUSH_CHARS: ${TTS_FLUSH_CHARS:-48}
+      TTS_FLUSH_CHARS: ${TTS_FLUSH_CHARS:-64}
+      TTS_VOICE: ${TTS_VOICE:-af_heart}
     ports:
       - "8000:8000"
     depends_on:
@@ -32,22 +33,34 @@ services:
   tts:
     build:
       context: ../services/tts
-    expose:
-      - "8010"
+    environment:
+      TTS_VOICE: ${TTS_VOICE:-af_heart}
+    ports:
+      - "8010:8010"
 
   avatar:
     build:
       context: ../services/avatar
+    environment:
+      API_BASE_URL: ${API_BASE_URL:-http://api:8000}
+      TTS_BASE_URL: ${TTS_BASE_URL:-http://tts:8010}
     ports:
       - "8020:8020"
+    volumes:
+      - ../models:/app/models
+      - ../services/avatar/assets:/app/assets
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
 
   vllm:
     image: vllm/vllm-openai:latest
     command: >
-      --model ${MODEL_NAME:-Qwen/Qwen2.5-7B-Instruct}
-      --host 0.0.0.0
-      --port 8001
-      --gpu-memory-utilization 0.92
+      --model ${MODEL_NAME:-Qwen/Qwen2.5-7B-Instruct} --host 0.0.0.0 --port 8001 --gpu-memory-utilization 0.92
     ports:
       - "8001:8001"
     volumes:

@@ -1,2 +1,23 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
+websockets==13.1
+pydantic==2.9.2
+requests==2.32.3
+aiohttp==3.10.5
+numpy<2.0.0
+
+# MuseTalk Core Dependencies
+torch==2.1.2  # PyTorch that matches cuda 11.8
+torchvision==0.16.2
+torchaudio==2.1.2
+diffusers==0.27.2
+transformers==4.39.3
+accelerate==0.29.3
+ffmpeg-python==0.2.0
+
+
+# Additional utilities
+opencv-python-headless==4.9.0.80
+omegaconf==2.3.0
+scipy==1.13.0
+tqdm==4.66.2
