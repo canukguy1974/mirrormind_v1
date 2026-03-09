@@ -73,3 +73,14 @@ This runs in `STREAM_MODE=mock` so you can validate UI streaming immediately.
 3. Push a real media stream URL back to frontend avatar panel (HLS or WebRTC).
 4. Add queue/session state (Redis) once concurrency increases.
 5. Add voice input/VAD turn-taking (TEN) only after text+TTS+avatar loop is stable.
+
+## Troubleshooting (Docker credential helper / WSL)
+
+If build fails with errors like:
+- `error getting credentials ...`
+- `WSL ... UtilAcceptVsock ... accept4 failed 110`
+
+Use the safe compose wrapper:
+- `powershell -ExecutionPolicy Bypass -File scripts/docker-compose-safe.ps1`
+
+This runs compose with a helper-free Docker config so public image metadata pulls do not depend on the Desktop credential helper.

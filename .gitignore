@@ -23,6 +23,8 @@
 .vscode
 .cache
 .tmp
+/.docker-tmp
+/.docker-tmp*
 *.log
 *Zone.Identifier
 .env.local
