@@ -275,9 +275,9 @@ export default function ChatClient() {
   return (
     <section className="shell">
       <div className="chat-area">
-        <h1 className="title">MirrorMind v1</h1>
+        <h1 className="title">AI Assistant</h1>
         <p className="subtitle">
-          Text streaming is live. TTS audio plays automatically when available.
+          Chat, voice, and avatar — all in one place.
         </p>
 
         <div className="status-row">
@@ -349,12 +349,12 @@ export default function ChatClient() {
             aspectRatio: '1',
             borderRadius: '12px',
             overflow: 'hidden',
-            backgroundColor: '#1e293b',
+            backgroundColor: '#fff4ea',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            border: isPlaying ? '2px solid #3b82f6' : '1px solid #334155',
-            boxShadow: isPlaying ? '0 0 15px rgba(59, 130, 246, 0.4)' : 'none',
+            border: isPlaying ? '2px solid #f97316' : '1px solid #f0e0cc',
+            boxShadow: isPlaying ? '0 0 15px rgba(249, 115, 22, 0.3)' : 'none',
             transition: 'all 0.3s ease'
           }}>
             <canvas
@@ -365,13 +365,13 @@ export default function ChatClient() {
             />
             {!hasAvatarStream && (
               <div style={{
-                color: '#94a3b8',
+                color: '#8a7560',
                 textAlign: 'center',
                 fontSize: '0.9rem',
                 position: 'absolute',
                 bottom: '12px',
                 left: '12px',
-                background: 'rgba(15, 23, 42, 0.75)',
+                background: 'rgba(255, 244, 234, 0.9)',
                 borderRadius: '6px',
                 padding: '4px 8px'
               }}>

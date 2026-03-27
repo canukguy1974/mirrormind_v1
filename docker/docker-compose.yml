@@ -21,14 +21,16 @@ services:
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       TTS_BASE_URL: ${TTS_BASE_URL:-http://tts:8010}
-      AVATAR_BASE_URL: ${AVATAR_BASE_URL:-http://avatar:8020}
+      AVATAR_MODE: ${AVATAR_MODE:-local}
+      AVATAR_LOCAL_BASE_URL: ${AVATAR_LOCAL_BASE_URL:-http://avatar:8020}
+      AVATAR_RUNPOD_BASE_URL: ${AVATAR_RUNPOD_BASE_URL:-}
+      AVATAR_BASE_URL: ${AVATAR_BASE_URL:-}
       TTS_FLUSH_CHARS: ${TTS_FLUSH_CHARS:-64}
       TTS_VOICE: ${TTS_VOICE:-af_heart}
     ports:
       - "8000:8000"
     depends_on:
       - tts
-      - avatar
 
   tts:
     build:
@@ -44,6 +46,8 @@ services:
     environment:
       API_BASE_URL: ${API_BASE_URL:-http://api:8000}
       TTS_BASE_URL: ${TTS_BASE_URL:-http://tts:8010}
+      HF_HOME: /app/models/.hf
+      HUGGINGFACE_HUB_CACHE: /app/models/.hf/hub
     ports:
       - "8020:8020"
     volumes:

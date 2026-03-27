@@ -8,9 +8,6 @@ from uuid import uuid4
 import httpx
 import websockets
 from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
-
-import httpx
-from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 
@@ -23,8 +20,45 @@ VLLM_BASE_URL = os.getenv("VLLM_BASE_URL", "http://localhost:8001")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://host.docker.internal:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", MODEL_NAME)
 TTS_BASE_URL = os.getenv("TTS_BASE_URL", "http://localhost:8010")
-AVATAR_BASE_URL = os.getenv("AVATAR_BASE_URL", "http://localhost:8020")
+AVATAR_MODE = os.getenv("AVATAR_MODE", "local").lower()
+AVATAR_LOCAL_BASE_URL = os.getenv("AVATAR_LOCAL_BASE_URL", "http://avatar:8020")
+AVATAR_RUNPOD_BASE_URL = os.getenv("AVATAR_RUNPOD_BASE_URL", "")
+AVATAR_BASE_URL_OVERRIDE = os.getenv("AVATAR_BASE_URL", "")
 TTS_FLUSH_CHARS = int(os.getenv("TTS_FLUSH_CHARS", "48"))
+
+
+def resolve_avatar_base_url() -> str:
+  """
+  Resolve avatar endpoint from config.
+  Priority:
+  1. AVATAR_BASE_URL (legacy hard override)
+  2. AVATAR_MODE == runpod -> AVATAR_RUNPOD_BASE_URL
+  3. AVATAR_MODE == local  -> AVATAR_LOCAL_BASE_URL
+  4. AVATAR_MODE == auto   -> RUNPOD if set, else local
+  """
+  if AVATAR_BASE_URL_OVERRIDE:
+    return AVATAR_BASE_URL_OVERRIDE.rstrip("/")
+
+  if AVATAR_MODE == "runpod":
+    return AVATAR_RUNPOD_BASE_URL.rstrip("/")
+  if AVATAR_MODE == "local":
+    return AVATAR_LOCAL_BASE_URL.rstrip("/")
+
+  # auto/default
+  if AVATAR_RUNPOD_BASE_URL:
+    return AVATAR_RUNPOD_BASE_URL.rstrip("/")
+  return AVATAR_LOCAL_BASE_URL.rstrip("/")
+
+
+def to_ws_base_url(http_base: str) -> str:
+  if http_base.startswith("https://"):
+    return "wss://" + http_base[len("https://") :]
+  if http_base.startswith("http://"):
+    return "ws://" + http_base[len("http://") :]
+  return http_base
+
+
+AVATAR_BASE_URL = resolve_avatar_base_url()
 
 PERSONA_PROMPTS = {
   "flirty": "You are playful, witty, and warm. Keep responses concise.",
@@ -64,7 +98,8 @@ async def stream_mock_tokens(message: str, persona: str) -> AsyncIterator[str]:
 
   for token in response.split(" "):
     yield f"{token} "
-    await asyncio.sleep(0.05)
+    # Keep mock mode responsive so UI latency reflects pipeline, not fake token delay.
+    await asyncio.sleep(0.005)
 
 
 async def push_tts_chunk(text: str, session_id: str, chunk_index: int) -> str | None:
@@ -122,15 +157,15 @@ async def trigger_avatar_sync(audio_url: str, session_id: str) -> None:
     "avatar_image_path": "/app/assets/default_avatar.jpg"
   }
 
-  # Avatar may still be initializing; retry a couple of times.
-  for attempt in (1, 2):
+  # Avatar may still be initializing or busy; keep retries short.
+  for attempt in (1, 2, 3):
     try:
-      async with httpx.AsyncClient(timeout=15) as client:
+      async with httpx.AsyncClient(timeout=3) as client:
         await client.post(f"{AVATAR_BASE_URL.rstrip('/')}/avatar/lip-sync", json=payload)
         return
     except Exception as e:
       print(f"Failed to trigger avatar sync attempt={attempt}: {repr(e)}")
-      await asyncio.sleep(0.15 * attempt)
+      await asyncio.sleep(0.2 * attempt)
 
 
 def persona_prompt(persona: str) -> str:
@@ -151,6 +186,7 @@ async def health() -> dict:
     "model_name": MODEL_NAME,
     "ollama_model": OLLAMA_MODEL,
     "llm_target": llm_target,
+    "avatar_mode": AVATAR_MODE,
     "avatar_base_url": AVATAR_BASE_URL
   }
 
@@ -186,8 +222,9 @@ async def chat_stream(
       try:
         url = await push_tts_chunk(text, session_id, index)
         if url:
-          await trigger_avatar_sync(url, session_id)
+          # Never block audio playback path on avatar sync latency.
           await queue.put(("audio", {"audio_url": url, "chunk_index": index}))
+          asyncio.create_task(trigger_avatar_sync(url, session_id))
       finally:
         active_tasks -= 1
         if producer_finished and active_tasks == 0:
@@ -306,15 +343,37 @@ async def proxy_avatar_stream(websocket: WebSocket, session_id: str):
     await websocket.close()
     return
     
-  target_ws_url = f"{AVATAR_BASE_URL.replace('http', 'ws').rstrip('/')}/avatar/stream/{session_id}"
+  target_ws_url = f"{to_ws_base_url(AVATAR_BASE_URL).rstrip('/')}/avatar/stream/{session_id}"
   
   try:
-    async with websockets.connect(target_ws_url) as backend_ws:
-      # We only need one-way streaming for frames (Backend -> Frontend)
-      async for message in backend_ws:
-        await websocket.send_text(message)
+    while True:
+      try:
+        async with websockets.connect(
+          target_ws_url,
+          # MuseTalk inference can block for long spans before next frame.
+          # Disable client-side keepalive ping timeout to avoid premature closes.
+          ping_interval=None,
+          max_size=None,
+        ) as backend_ws:
+          # We only need one-way streaming for frames (Backend -> Frontend)
+          async for message in backend_ws:
+            await websocket.send_text(message)
+      except (
+        ConnectionRefusedError,
+        OSError,
+        websockets.exceptions.WebSocketException,
+      ) as e:
+        print(f"[AvatarWS] backend unavailable for {session_id}, retrying: {repr(e)}")
+        await asyncio.sleep(0.5)
+      else:
+        break
+  except WebSocketDisconnect:
+    pass
   finally:
-    await websocket.close()
+    try:
+      await websocket.close()
+    except Exception:
+      pass
 
 
 @app.get("/avatar/portrait")

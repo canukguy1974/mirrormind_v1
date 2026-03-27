@@ -50,3 +50,7 @@ yarn-error.log*
 # large local assets
 /models/*
 !/models/.gitkeep
+
+# local-only notes (not for repo)
+docs/RUNPOD_BEGINNER_GUIDE.md
+docs/WHERE_WE_LEFT_OFF_AT_RUNPOD.md

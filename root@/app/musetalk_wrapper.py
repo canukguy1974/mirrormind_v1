@@ -84,8 +84,6 @@ class MuseTalkWrapper:
         self.avatar_img = None
         self.avatar_crop_bbox = None
         self.latent_cache = None
-        self.realtime_deadline_s = self._load_realtime_deadline()
-        self.blend_mode = os.getenv("MUSE_TALK_BLEND_MODE", "mouth").strip().lower() or "mouth"
         if self.device.type == "cuda":
             try:
                 vram_gb = torch.cuda.get_device_properties(0).total_memory / (1024 ** 3)
@@ -96,23 +94,6 @@ class MuseTalkWrapper:
             except Exception:
                 pass
         print(f"Initializing MuseTalk wrapper on {self.device}...")
-        if self.realtime_deadline_s <= 0:
-            print("MuseTalk realtime setup deadline disabled.")
-        else:
-            print(f"MuseTalk realtime setup deadline set to {self.realtime_deadline_s:.1f}s.")
-        print(f"MuseTalk blend mode set to {self.blend_mode!r}.")
-
-    @staticmethod
-    def _load_realtime_deadline() -> float:
-        raw_value = os.getenv("MUSE_TALK_REALTIME_DEADLINE_S", "8")
-        try:
-            return float(raw_value)
-        except ValueError:
-            print(
-                f"Invalid MUSE_TALK_REALTIME_DEADLINE_S={raw_value!r}; "
-                "falling back to 8.0 seconds."
-            )
-            return 8.0
 
     def load_models(self, models_dir: str):
         if self.is_loaded:
@@ -338,16 +319,12 @@ class MuseTalkWrapper:
 
         try:
             start_ts = time.monotonic()
+            realtime_deadline_s = 8.0
             audio_prompts = self._extract_whisper_chunks(wav_path, fps=24)
             if audio_prompts.numel() == 0:
                 return
-            setup_elapsed_s = time.monotonic() - start_ts
-            if self.realtime_deadline_s > 0 and setup_elapsed_s > self.realtime_deadline_s:
-                print(
-                    "MuseTalk inference setup exceeded realtime budget "
-                    f"({setup_elapsed_s:.2f}s > {self.realtime_deadline_s:.2f}s); "
-                    "using fallback animation."
-                )
+            if time.monotonic() - start_ts > realtime_deadline_s:
+                print("MuseTalk inference setup exceeded realtime budget; using fallback animation.")
                 async for frame_b64 in self._yield_fallback_animation(audio_data, fps=24):
                     yield frame_b64
                 return
@@ -379,17 +356,13 @@ class MuseTalkWrapper:
                 base_patch = frame[y1:y2, x1:x2].astype(np.float32)
                 pred_patch = face_patch.astype(np.float32)
 
-                if self.blend_mode == "full_face":
-                    # Debug/validation mode: replace the full crop so motion is visually obvious.
-                    mask = np.ones((face_h, face_w, 1), dtype=np.float32)
-                else:
-                    # Blend only a feathered mouth region to avoid square artifacts.
-                    mask = np.zeros((face_h, face_w), dtype=np.float32)
-                    center = (face_w // 2, int(face_h * 0.68))
-                    axes = (max(8, int(face_w * 0.20)), max(8, int(face_h * 0.16)))
-                    cv2.ellipse(mask, center, axes, 0, 0, 360, 1.0, -1)
-                    mask = cv2.GaussianBlur(mask, (0, 0), sigmaX=8.0, sigmaY=8.0)
-                    mask = np.clip(mask, 0.0, 1.0)[:, :, None]
+                # Blend only a feathered mouth region to avoid square artifacts.
+                mask = np.zeros((face_h, face_w), dtype=np.float32)
+                center = (face_w // 2, int(face_h * 0.68))
+                axes = (max(8, int(face_w * 0.20)), max(8, int(face_h * 0.16)))
+                cv2.ellipse(mask, center, axes, 0, 0, 360, 1.0, -1)
+                mask = cv2.GaussianBlur(mask, (0, 0), sigmaX=8.0, sigmaY=8.0)
+                mask = np.clip(mask, 0.0, 1.0)[:, :, None]
 
                 blended = (base_patch * (1.0 - mask) + pred_patch * mask).astype(np.uint8)
                 frame[y1:y2, x1:x2] = blended

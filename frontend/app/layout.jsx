@@ -1,8 +1,8 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "MirrorMind v1",
-  description: "Low-latency text, voice, and avatar orchestration"
+  title: "AI Assistant",
+  description: "Chat, voice, and avatar orchestration."
 };
 
 export default function RootLayout({ children }) {
